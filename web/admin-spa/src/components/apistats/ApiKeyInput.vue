@@ -12,53 +12,18 @@
     <!-- 输入区域 -->
     <div class="mx-auto max-w-4xl">
       <!-- 控制栏 -->
-      <div class="control-bar mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div class="control-bar mb-4">
         <!-- API Key 标签 -->
         <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
           <i class="fas fa-key mr-2" />
-          {{ multiKeyMode ? '输入您的 API Keys（每行一个或用逗号分隔）' : '输入您的 API Key' }}
+          输入您的 API Key
         </label>
-
-        <!-- 模式切换和查询按钮组 -->
-        <div class="button-group flex items-center gap-2">
-          <!-- 模式切换 -->
-          <div
-            class="mode-switch-group flex items-center rounded-lg bg-gray-100 p-1 dark:bg-gray-800"
-          >
-            <button
-              class="mode-switch-btn"
-              :class="{ active: !multiKeyMode }"
-              title="单一模式"
-              @click="multiKeyMode = false"
-            >
-              <i class="fas fa-key" />
-              <span class="ml-2 hidden sm:inline">单一</span>
-            </button>
-            <button
-              class="mode-switch-btn"
-              :class="{ active: multiKeyMode }"
-              title="聚合模式"
-              @click="multiKeyMode = true"
-            >
-              <i class="fas fa-layer-group" />
-              <span class="ml-2 hidden sm:inline">聚合</span>
-              <span
-                v-if="multiKeyMode && parsedApiKeys.length > 0"
-                class="ml-1 rounded-full bg-white/20 px-1.5 py-0.5 text-xs font-semibold"
-              >
-                {{ parsedApiKeys.length }}
-              </span>
-            </button>
-          </div>
-        </div>
       </div>
 
       <div class="api-input-grid grid grid-cols-1 gap-4 lg:grid-cols-4">
         <!-- API Key 输入 -->
         <div class="lg:col-span-3">
-          <!-- 单 Key 模式输入框 -->
           <input
-            v-if="!multiKeyMode"
             v-model="apiKey"
             class="wide-card-input w-full"
             :disabled="loading"
@@ -66,26 +31,6 @@
             type="password"
             @keyup.enter="queryStats"
           />
-
-          <!-- 多 Key 模式输入框 -->
-          <div v-else class="relative">
-            <textarea
-              v-model="apiKey"
-              class="wide-card-input w-full resize-y"
-              :disabled="loading"
-              placeholder="请输入您的 API Keys，支持以下格式：&#10;cr_xxx&#10;cr_yyy&#10;或&#10;cr_xxx, cr_yyy"
-              rows="4"
-              @keyup.ctrl.enter="queryStats"
-            />
-            <button
-              v-if="apiKey && !loading"
-              class="absolute right-2 top-2 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
-              title="清空输入"
-              @click="clearInput"
-            >
-              <i class="fas fa-times-circle" />
-            </button>
-          </div>
         </div>
 
         <!-- 查询按钮 -->
@@ -105,20 +50,7 @@
       <!-- 安全提示 -->
       <div class="security-notice mt-4">
         <i class="fas fa-shield-alt mr-2" />
-        {{
-          multiKeyMode
-            ? '您的 API Keys 仅用于查询统计数据，不会被存储。聚合模式下部分个体化信息将不显示。'
-            : '您的 API Key 仅用于查询自己的统计数据，不会被存储或用于其他用途'
-        }}
-      </div>
-
-      <!-- 多 Key 模式额外提示 -->
-      <div
-        v-if="multiKeyMode"
-        class="mt-2 rounded-lg bg-blue-50 p-3 text-sm text-blue-700 dark:bg-blue-900/20 dark:text-blue-400"
-      >
-        <i class="fas fa-lightbulb mr-2" />
-        <span>提示：最多支持同时查询 30 个 API Keys。使用 Ctrl+Enter 快速查询。</span>
+        您的 API Key 仅用于查询自己的统计数据，不会被存储或用于其他用途
       </div>
     </div>
   </div>
@@ -130,29 +62,11 @@ import { storeToRefs } from 'pinia'
 import { useApiStatsStore } from '@/stores/apistats'
 
 const apiStatsStore = useApiStatsStore()
-const { apiKey, loading, multiKeyMode } = storeToRefs(apiStatsStore)
-const { queryStats, clearInput } = apiStatsStore
-
-// 解析输入的 API Keys
-const parsedApiKeys = computed(() => {
-  if (!multiKeyMode.value || !apiKey.value) return []
-
-  // 支持逗号和换行符分隔
-  const keys = apiKey.value
-    .split(/[,\n]+/)
-    .map((key) => key.trim())
-    .filter((key) => key.length > 0)
-
-  // 去重并限制最多30个
-  const uniqueKeys = [...new Set(keys)]
-  return uniqueKeys.slice(0, 30)
-})
+const { apiKey, loading } = storeToRefs(apiStatsStore)
+const { queryStats } = apiStatsStore
 
 // 判断是否有有效输入
 const hasValidInput = computed(() => {
-  if (multiKeyMode.value) {
-    return parsedApiKeys.value.length > 0
-  }
   return apiKey.value && apiKey.value.trim().length > 0
 })
 </script>
@@ -354,83 +268,6 @@ const hasValidInput = computed(() => {
   border-bottom-color: rgba(75, 85, 99, 0.3);
 }
 
-/* 按钮组 */
-.button-group {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-/* 模式切换组 */
-.mode-switch-group {
-  display: inline-flex;
-  padding: 4px;
-  background: #f3f4f6;
-  border-radius: 0.5rem;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
-}
-
-:global(.dark) .mode-switch-group {
-  background: #1f2937;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
-}
-
-/* 模式切换按钮 */
-.mode-switch-btn {
-  display: inline-flex;
-  align-items: center;
-  padding: 6px 12px;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: #6b7280;
-  background: transparent;
-  border: none;
-  border-radius: 0.375rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  white-space: nowrap;
-}
-
-:global(.dark) .mode-switch-btn {
-  color: #9ca3af;
-}
-
-.mode-switch-btn:hover:not(.active) {
-  color: #374151;
-  background: rgba(0, 0, 0, 0.05);
-}
-
-:global(.dark) .mode-switch-btn:hover:not(.active) {
-  color: #d1d5db;
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.mode-switch-btn.active {
-  color: white;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  box-shadow: 0 2px 4px rgba(102, 126, 234, 0.2);
-}
-
-.mode-switch-btn.active:hover {
-  box-shadow: 0 4px 6px rgba(102, 126, 234, 0.3);
-}
-
-.mode-switch-btn i {
-  font-size: 0.875rem;
-}
-
-/* 淡入淡出动画 */
-.fade-enter-active,
-.fade-leave-active {
-  transition: all 0.3s ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-  transform: translateX(-10px);
-}
-
 /* 加载动画 */
 .loading-spinner {
   animation: spin 1s linear infinite;
@@ -447,18 +284,6 @@ const hasValidInput = computed(() => {
 }
 
 /* 响应式优化 */
-@media (max-width: 768px) {
-  .control-bar {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 1rem;
-  }
-
-  .button-group {
-    justify-content: center;
-  }
-}
-
 @media (max-width: 768px) {
   .api-input-wide-card {
     padding: 1.25rem;
@@ -493,22 +318,6 @@ const hasValidInput = computed(() => {
   .security-notice {
     padding: 10px 14px;
     font-size: 0.8rem;
-  }
-}
-
-@media (max-width: 480px) {
-  .mode-toggle-btn {
-    padding: 5px 8px;
-  }
-
-  .toggle-icon {
-    width: 18px;
-    height: 18px;
-  }
-
-  .hint-text {
-    font-size: 0.7rem;
-    padding: 4px 8px;
   }
 }
 

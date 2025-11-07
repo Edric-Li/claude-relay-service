@@ -6,7 +6,7 @@
         <LogoTitle
           :loading="oemLoading"
           :logo-src="oemSettings.siteIconData || oemSettings.siteIcon"
-          :subtitle="currentTab === 'stats' ? 'API Key 使用统计' : '使用教程'"
+          subtitle="API Key 使用统计"
           :title="oemSettings.siteName"
         />
         <div class="flex items-center gap-2 md:gap-4">
@@ -43,32 +43,8 @@
       </div>
     </div>
 
-    <!-- Tab 切换 -->
-    <div class="mb-6 md:mb-8">
-      <div class="flex justify-center">
-        <div
-          class="inline-flex w-full max-w-md rounded-full border border-white/20 bg-white/10 p-1 shadow-lg backdrop-blur-xl md:w-auto"
-        >
-          <button
-            :class="['tab-pill-button', currentTab === 'stats' ? 'active' : '']"
-            @click="currentTab = 'stats'"
-          >
-            <i class="fas fa-chart-line mr-1 md:mr-2" />
-            <span class="text-sm md:text-base">统计查询</span>
-          </button>
-          <button
-            :class="['tab-pill-button', currentTab === 'tutorial' ? 'active' : '']"
-            @click="currentTab = 'tutorial'"
-          >
-            <i class="fas fa-graduation-cap mr-1 md:mr-2" />
-            <span class="text-sm md:text-base">使用教程</span>
-          </button>
-        </div>
-      </div>
-    </div>
-
     <!-- 统计内容 -->
-    <div v-if="currentTab === 'stats'" class="tab-content">
+    <div class="tab-content">
       <!-- API Key 输入区域 -->
       <ApiKeyInput />
 
@@ -127,12 +103,7 @@
             class="mb-6 mt-6 grid grid-cols-1 gap-4 md:mb-8 md:mt-8 md:gap-6 xl:grid-cols-2 xl:items-stretch"
           >
             <TokenDistribution class="h-full" />
-            <template v-if="multiKeyMode">
-              <AggregatedStatsCard class="h-full" />
-            </template>
-            <template v-else>
-              <LimitConfig class="h-full" />
-            </template>
+            <LimitConfig class="h-full" />
           </div>
 
           <!-- 模型使用统计 -->
@@ -140,18 +111,11 @@
         </div>
       </div>
     </div>
-
-    <!-- 教程内容 -->
-    <div v-if="currentTab === 'tutorial'" class="tab-content">
-      <div class="glass-strong rounded-3xl shadow-xl">
-        <TutorialView />
-      </div>
-    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
+import { onMounted, onUnmounted, watch, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useApiStatsStore } from '@/stores/apistats'
@@ -162,16 +126,11 @@ import ApiKeyInput from '@/components/apistats/ApiKeyInput.vue'
 import StatsOverview from '@/components/apistats/StatsOverview.vue'
 import TokenDistribution from '@/components/apistats/TokenDistribution.vue'
 import LimitConfig from '@/components/apistats/LimitConfig.vue'
-import AggregatedStatsCard from '@/components/apistats/AggregatedStatsCard.vue'
 import ModelUsageStats from '@/components/apistats/ModelUsageStats.vue'
-import TutorialView from './TutorialView.vue'
 
 const route = useRoute()
 const apiStatsStore = useApiStatsStore()
 const themeStore = useThemeStore()
-
-// 当前标签页
-const currentTab = ref('stats')
 
 // 主题相关
 const isDarkMode = computed(() => themeStore.isDarkMode)
@@ -185,8 +144,7 @@ const {
   error,
   statsPeriod,
   statsData,
-  oemSettings,
-  multiKeyMode
+  oemSettings
 } = storeToRefs(apiStatsStore)
 
 const { queryStats, switchPeriod, loadStatsWithApiId, loadOemSettings, reset } = apiStatsStore
@@ -511,67 +469,6 @@ watch(apiKey, (newValue) => {
   background: rgba(75, 85, 99, 0.6);
   color: #ffffff;
   border-color: rgba(107, 114, 128, 0.8);
-}
-
-/* Tab 胶囊按钮样式 */
-.tab-pill-button {
-  padding: 0.5rem 1rem;
-  border-radius: 9999px;
-  font-weight: 500;
-  font-size: 0.875rem;
-  color: rgba(255, 255, 255, 0.8);
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  white-space: nowrap;
-  flex: 1;
-  justify-content: center;
-}
-
-/* 暗夜模式下的Tab按钮基础样式 */
-:global(html.dark) .tab-pill-button {
-  color: rgba(209, 213, 219, 0.8);
-}
-
-@media (min-width: 768px) {
-  .tab-pill-button {
-    padding: 0.625rem 1.25rem;
-    flex: none;
-  }
-}
-
-.tab-pill-button:hover {
-  color: white;
-  background: rgba(255, 255, 255, 0.1);
-}
-
-:global(html.dark) .tab-pill-button:hover {
-  color: #f3f4f6;
-  background: rgba(100, 116, 139, 0.2);
-}
-
-.tab-pill-button.active {
-  background: white;
-  color: #764ba2;
-  box-shadow:
-    0 4px 6px -1px rgba(0, 0, 0, 0.1),
-    0 2px 4px -1px rgba(0, 0, 0, 0.06);
-}
-
-:global(html.dark) .tab-pill-button.active {
-  background: rgba(71, 85, 105, 0.9);
-  color: #f3f4f6;
-  box-shadow:
-    0 4px 6px -1px rgba(0, 0, 0, 0.3),
-    0 2px 4px -1px rgba(0, 0, 0, 0.2);
-}
-
-.tab-pill-button i {
-  font-size: 0.875rem;
 }
 
 /* Tab 内容切换动画 */
