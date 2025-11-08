@@ -9,6 +9,7 @@ const {
   sanitizeErrorMessage,
   isAccountDisabledError
 } = require('../utils/errorSanitizer')
+const ConsoleErrorHandler = require('../utils/consoleErrorHandler')
 
 class ClaudeConsoleRelayService {
   constructor() {
@@ -246,11 +247,27 @@ class ClaudeConsoleRelayService {
       // 检查是否为账户禁用/不可用的 400 错误
       const accountDisabledError = isAccountDisabledError(response.status, response.data)
 
-      // 检查错误状态并相应处理
+      // 🛡️ 智能错误处理
       if (response.status === 401) {
-        logger.warn(`🚫 Unauthorized error detected for Claude Console account ${accountId}`)
-        await claudeConsoleAccountService.markAccountUnauthorized(accountId)
+        // 使用智能判断：区分Console API Key问题和上游池子问题
+        const decision = await ConsoleErrorHandler.shouldMarkAccountUnavailable(
+          accountId,
+          response.status,
+          response.data
+        )
+
+        if (decision.shouldMarkUnavailable) {
+          logger.error(
+            `🚫 Marking Console account ${accountId} as unauthorized: ${decision.errorType} (${decision.errorCount}/${decision.threshold})`
+          )
+          await claudeConsoleAccountService.markAccountUnauthorized(accountId)
+        } else {
+          logger.warn(
+            `⚠️ Upstream 401 for Console account ${accountId}, not marking as unauthorized yet (${decision.errorCount}/${decision.threshold})`
+          )
+        }
       } else if (accountDisabledError) {
+        // 账号禁用错误（400）- 这是永久性错误，立即标记
         logger.error(
           `🚫 Account disabled error (400) detected for Claude Console account ${accountId}, marking as blocked`
         )
@@ -259,17 +276,50 @@ class ClaudeConsoleRelayService {
           typeof response.data === 'string' ? response.data : JSON.stringify(response.data)
         await claudeConsoleAccountService.markConsoleAccountBlocked(accountId, errorDetails)
       } else if (response.status === 429) {
-        logger.warn(`🚫 Rate limit detected for Claude Console account ${accountId}`)
         // 收到429先检查是否因为超过了手动配置的每日额度
         await claudeConsoleAccountService.checkQuotaUsage(accountId).catch((err) => {
           logger.error('❌ Failed to check quota after 429 error:', err)
         })
 
-        await claudeConsoleAccountService.markAccountRateLimited(accountId)
+        // 使用智能判断：连续多次429才标记
+        const decision = await ConsoleErrorHandler.shouldMarkAccountUnavailable(
+          accountId,
+          response.status,
+          response.data
+        )
+
+        if (decision.shouldMarkUnavailable) {
+          logger.error(
+            `🚫 Marking Console account ${accountId} as rate limited (${decision.errorCount}/${decision.threshold})`
+          )
+          await claudeConsoleAccountService.markAccountRateLimited(accountId)
+        } else {
+          logger.warn(
+            `⚠️ Upstream 429 for Console account ${accountId}, not marking as rate limited yet (${decision.errorCount}/${decision.threshold})`
+          )
+        }
       } else if (response.status === 529) {
-        logger.warn(`🚫 Overload error detected for Claude Console account ${accountId}`)
-        await claudeConsoleAccountService.markAccountOverloaded(accountId)
+        // 使用智能判断：连续多次529才标记
+        const decision = await ConsoleErrorHandler.shouldMarkAccountUnavailable(
+          accountId,
+          response.status,
+          response.data
+        )
+
+        if (decision.shouldMarkUnavailable) {
+          logger.error(
+            `🚫 Marking Console account ${accountId} as overloaded (${decision.errorCount}/${decision.threshold})`
+          )
+          await claudeConsoleAccountService.markAccountOverloaded(accountId)
+        } else {
+          logger.warn(
+            `⚠️ Upstream 529 for Console account ${accountId}, not marking as overloaded yet (${decision.errorCount}/${decision.threshold})`
+          )
+        }
       } else if (response.status === 200 || response.status === 201) {
+        // 请求成功，清除错误计数器和错误状态
+        await ConsoleErrorHandler.clearErrorCounters(accountId)
+
         // 如果请求成功，检查并移除错误状态
         const isRateLimited = await claudeConsoleAccountService.isAccountRateLimited(accountId)
         if (isRateLimited) {
@@ -608,9 +658,27 @@ class ClaudeConsoleRelayService {
                 errorDataForCheck
               )
 
+              // 🛡️ 智能错误处理（流式请求）
               if (response.status === 401) {
-                await claudeConsoleAccountService.markAccountUnauthorized(accountId)
+                // 使用智能判断：区分Console API Key问题和上游池子问题
+                const decision = await ConsoleErrorHandler.shouldMarkAccountUnavailable(
+                  accountId,
+                  response.status,
+                  errorDataForCheck
+                )
+
+                if (decision.shouldMarkUnavailable) {
+                  logger.error(
+                    `🚫 [Stream] Marking Console account ${accountId} as unauthorized: ${decision.errorType} (${decision.errorCount}/${decision.threshold})`
+                  )
+                  await claudeConsoleAccountService.markAccountUnauthorized(accountId)
+                } else {
+                  logger.warn(
+                    `⚠️ [Stream] Upstream 401 for Console account ${accountId}, not marking yet (${decision.errorCount}/${decision.threshold})`
+                  )
+                }
               } else if (accountDisabledError) {
+                // 账号禁用错误（400）- 这是永久性错误，立即标记
                 logger.error(
                   `🚫 [Stream] Account disabled error (400) detected for Claude Console account ${accountId}, marking as blocked`
                 )
@@ -620,13 +688,46 @@ class ClaudeConsoleRelayService {
                   errorDataForCheck
                 )
               } else if (response.status === 429) {
-                await claudeConsoleAccountService.markAccountRateLimited(accountId)
                 // 检查是否因为超过每日额度
                 claudeConsoleAccountService.checkQuotaUsage(accountId).catch((err) => {
                   logger.error('❌ Failed to check quota after 429 error:', err)
                 })
+
+                // 使用智能判断：连续多次429才标记
+                const decision = await ConsoleErrorHandler.shouldMarkAccountUnavailable(
+                  accountId,
+                  response.status,
+                  errorDataForCheck
+                )
+
+                if (decision.shouldMarkUnavailable) {
+                  logger.error(
+                    `🚫 [Stream] Marking Console account ${accountId} as rate limited (${decision.errorCount}/${decision.threshold})`
+                  )
+                  await claudeConsoleAccountService.markAccountRateLimited(accountId)
+                } else {
+                  logger.warn(
+                    `⚠️ [Stream] Upstream 429 for Console account ${accountId}, not marking yet (${decision.errorCount}/${decision.threshold})`
+                  )
+                }
               } else if (response.status === 529) {
-                await claudeConsoleAccountService.markAccountOverloaded(accountId)
+                // 使用智能判断：连续多次529才标记
+                const decision = await ConsoleErrorHandler.shouldMarkAccountUnavailable(
+                  accountId,
+                  response.status,
+                  errorDataForCheck
+                )
+
+                if (decision.shouldMarkUnavailable) {
+                  logger.error(
+                    `🚫 [Stream] Marking Console account ${accountId} as overloaded (${decision.errorCount}/${decision.threshold})`
+                  )
+                  await claudeConsoleAccountService.markAccountOverloaded(accountId)
+                } else {
+                  logger.warn(
+                    `⚠️ [Stream] Upstream 529 for Console account ${accountId}, not marking yet (${decision.errorCount}/${decision.threshold})`
+                  )
+                }
               }
 
               // 设置响应头
@@ -667,7 +768,9 @@ class ClaudeConsoleRelayService {
             return
           }
 
-          // 成功响应，检查并移除错误状态
+          // 成功响应，清除错误计数器和错误状态
+          ConsoleErrorHandler.clearErrorCounters(accountId)
+
           claudeConsoleAccountService.isAccountRateLimited(accountId).then((isRateLimited) => {
             if (isRateLimited) {
               claudeConsoleAccountService.removeAccountRateLimit(accountId)
