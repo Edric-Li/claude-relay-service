@@ -175,6 +175,37 @@ const config = {
     retries: parseInt(process.env.WEBHOOK_RETRIES) || 3 // 重试3次
   },
 
+  // 🔄 自动重试和容错配置
+  retry: {
+    // 系统B (上游池子) 的自动故障转移配置
+    pool: {
+      enabled: process.env.ENABLE_POOL_FAILOVER === 'true', // 默认关闭，需要手动启用
+      maxRetries: parseInt(process.env.POOL_FAILOVER_MAX_RETRIES) || 2, // 最多重试2次
+      clearSessionOnRetry: process.env.POOL_FAILOVER_CLEAR_SESSION !== 'false' // 重试时清除粘性会话，默认true
+    },
+
+    // 系统A (下游) 的Console账号容错配置
+    console: {
+      // 智能错误处理：区分上游临时错误和Console账号自身错误
+      intelligentErrorHandling: process.env.CONSOLE_INTELLIGENT_ERROR_HANDLING !== 'false', // 默认启用
+
+      // 401错误阈值：连续N次401才标记为unauthorized
+      max401Errors: parseInt(process.env.CONSOLE_MAX_401_ERRORS) || 3,
+      error401Window: parseInt(process.env.CONSOLE_401_ERROR_WINDOW) || 300, // 5分钟窗口
+
+      // 429错误阈值：窗口内N次429才标记为rate_limited
+      max429Errors: parseInt(process.env.CONSOLE_MAX_429_ERRORS) || 5,
+      error429Window: parseInt(process.env.CONSOLE_429_ERROR_WINDOW) || 300, // 5分钟窗口
+
+      // 529错误阈值：窗口内N次529才标记为overloaded
+      max529Errors: parseInt(process.env.CONSOLE_MAX_529_ERRORS) || 3,
+      error529Window: parseInt(process.env.CONSOLE_529_ERROR_WINDOW) || 180, // 3分钟窗口
+
+      // Console请求重试次数（给上游池子时间进行故障转移）
+      maxRetries: parseInt(process.env.CONSOLE_REQUEST_MAX_RETRIES) || 1
+    }
+  },
+
   // 🛠️ 开发配置
   development: {
     debug: process.env.DEBUG === 'true',
