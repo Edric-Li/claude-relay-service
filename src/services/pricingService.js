@@ -2,6 +2,8 @@ const fs = require('fs')
 const path = require('path')
 const https = require('https')
 const crypto = require('crypto')
+const { HttpsProxyAgent } = require('https-proxy-agent')
+const { SocksProxyAgent } = require('socks-proxy-agent')
 const pricingSource = require('../../config/pricingSource')
 const logger = require('../utils/logger')
 
@@ -27,6 +29,9 @@ class PricingService {
     this.hashCheckTimer = null // 哈希轮询定时器
     this.updateTimer = null // 定时更新任务句柄
     this.hashSyncInProgress = false // 哈希同步状态
+
+    // 代理配置（仅用于价格数据同步）
+    this.proxyUrl = process.env.PRICING_PROXY_URL
 
     // 硬编码的 1 小时缓存价格（美元/百万 token）
     // ephemeral_5m 的价格使用 model_pricing.json 中的 cache_creation_input_token_cost
@@ -210,7 +215,29 @@ class PricingService {
   // 获取远端哈希值
   fetchRemoteHash() {
     return new Promise((resolve, reject) => {
-      const request = https.get(this.hashUrl, (response) => {
+      const url = new URL(this.hashUrl)
+      const options = {
+        hostname: url.hostname,
+        path: url.pathname + url.search,
+        method: 'GET',
+        timeout: 30000
+      }
+
+      // 如果配置了代理，使用代理
+      if (this.proxyUrl) {
+        logger.debug(`🌐 Using proxy for hash fetch: ${this.proxyUrl}`)
+        if (this.proxyUrl.startsWith('socks5://') || this.proxyUrl.startsWith('socks4://')) {
+          options.agent = new SocksProxyAgent(this.proxyUrl)
+        } else if (this.proxyUrl.startsWith('http://') || this.proxyUrl.startsWith('https://')) {
+          options.agent = new HttpsProxyAgent(this.proxyUrl)
+        } else {
+          logger.warn(
+            `⚠️ Unknown proxy protocol in PRICING_PROXY_URL: ${this.proxyUrl}, expected socks5://, socks4://, http:// or https://`
+          )
+        }
+      }
+
+      const request = https.get(options, (response) => {
         if (response.statusCode !== 200) {
           reject(new Error(`哈希文件获取失败：HTTP ${response.statusCode}`))
           return
@@ -272,7 +299,29 @@ class PricingService {
   // 实际的下载逻辑
   _downloadFromRemote() {
     return new Promise((resolve, reject) => {
-      const request = https.get(this.pricingUrl, (response) => {
+      const url = new URL(this.pricingUrl)
+      const options = {
+        hostname: url.hostname,
+        path: url.pathname + url.search,
+        method: 'GET',
+        timeout: 30000
+      }
+
+      // 如果配置了代理，使用代理
+      if (this.proxyUrl) {
+        logger.info(`🌐 Using proxy for pricing download: ${this.proxyUrl}`)
+        if (this.proxyUrl.startsWith('socks5://') || this.proxyUrl.startsWith('socks4://')) {
+          options.agent = new SocksProxyAgent(this.proxyUrl)
+        } else if (this.proxyUrl.startsWith('http://') || this.proxyUrl.startsWith('https://')) {
+          options.agent = new HttpsProxyAgent(this.proxyUrl)
+        } else {
+          logger.warn(
+            `⚠️ Unknown proxy protocol in PRICING_PROXY_URL: ${this.proxyUrl}, expected socks5://, socks4://, http:// or https://`
+          )
+        }
+      }
+
+      const request = https.get(options, (response) => {
         if (response.statusCode !== 200) {
           reject(new Error(`HTTP ${response.statusCode}: ${response.statusMessage}`))
           return
