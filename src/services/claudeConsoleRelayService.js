@@ -316,6 +316,26 @@ class ClaudeConsoleRelayService {
             `⚠️ Upstream 529 for Console account ${accountId}, not marking as overloaded yet (${decision.errorCount}/${decision.threshold})`
           )
         }
+      } else if (response.status === 503) {
+        // 503 Service Unavailable - 上游服务不可用
+        // 使用智能判断：连续多次503才标记
+        const decision = await ConsoleErrorHandler.shouldMarkAccountUnavailable(
+          accountId,
+          response.status,
+          response.data
+        )
+
+        if (decision.shouldMarkUnavailable) {
+          logger.error(
+            `🚫 Marking Console account ${accountId} as unavailable due to 503 (${decision.errorCount}/${decision.threshold})`
+          )
+          // 复用 overload 机制处理 503，因为恢复策略相同（10分钟）
+          await claudeConsoleAccountService.markAccountOverloaded(accountId, '503')
+        } else {
+          logger.warn(
+            `⚠️ Upstream 503 for Console account ${accountId}, not marking as unavailable yet (${decision.errorCount}/${decision.threshold})`
+          )
+        }
       } else if (response.status === 200 || response.status === 201) {
         // 请求成功，清除错误计数器和错误状态
         await ConsoleErrorHandler.clearErrorCounters(accountId)

@@ -110,7 +110,7 @@ async function getOpenAIAuthToken(apiKeyData, sessionId = null, requestedModel =
 
     if (!result || !result.accountId) {
       const error = new Error('No available OpenAI account found')
-      error.statusCode = 402 // Payment Required - 资源耗尽
+      error.statusCode = 503 // Service Unavailable - 无可用账户
       throw error
     }
 

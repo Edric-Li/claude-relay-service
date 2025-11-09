@@ -53,8 +53,12 @@ router.post('/claude/v1/messages', authenticateApiKey, async (req, res) => {
     res.status(result.statusCode).set(result.headers).send(result.body)
   } catch (error) {
     logger.error('Droid Claude relay error:', error)
-    res.status(500).json({
-      error: 'internal_server_error',
+
+    // 无可用账户时返回 503
+    const statusCode = error.message && error.message.includes('No available') ? 503 : 500
+
+    res.status(statusCode).json({
+      error: statusCode === 503 ? 'service_unavailable' : 'internal_server_error',
       message: error.message
     })
   }
@@ -100,8 +104,12 @@ router.post(['/openai/v1/responses', '/openai/responses'], authenticateApiKey, a
     res.status(result.statusCode).set(result.headers).send(result.body)
   } catch (error) {
     logger.error('Droid OpenAI relay error:', error)
-    res.status(500).json({
-      error: 'internal_server_error',
+
+    // 无可用账户时返回 503
+    const statusCode = error.message && error.message.includes('No available') ? 503 : 500
+
+    res.status(statusCode).json({
+      error: statusCode === 503 ? 'service_unavailable' : 'internal_server_error',
       message: error.message
     })
   }

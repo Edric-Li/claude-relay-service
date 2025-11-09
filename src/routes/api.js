@@ -758,7 +758,14 @@ async function handleMessagesRequest(req, res) {
       let statusCode = 500
       let errorType = 'Relay service error'
 
+      // 🚨 无可用账户 - 返回 503
       if (
+        handledError.message.includes('No available') &&
+        handledError.message.includes('account')
+      ) {
+        statusCode = 503
+        errorType = 'service_unavailable'
+      } else if (
         handledError.message.includes('Connection reset') ||
         handledError.message.includes('socket hang up')
       ) {

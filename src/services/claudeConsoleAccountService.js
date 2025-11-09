@@ -902,8 +902,8 @@ class ClaudeConsoleAccountService {
     }
   }
 
-  // 🚫 标记账号为过载状态（529错误）
-  async markAccountOverloaded(accountId) {
+  // 🚫 标记账号为过载/不可用状态（529/503错误）
+  async markAccountOverloaded(accountId, statusCode = '529') {
     try {
       const client = redis.getClientSafe()
       const account = await this.getAccount(accountId)
@@ -912,10 +912,18 @@ class ClaudeConsoleAccountService {
         throw new Error('Account not found')
       }
 
+      // 根据状态码设置不同的错误消息和通知
+      const is503 = statusCode === '503' || statusCode === 503
+      const errorMessage = is503 ? '服务不可用（503错误）' : '服务过载（529错误）'
+      const errorCode = is503 ? 'CLAUDE_CONSOLE_UNAVAILABLE' : 'CLAUDE_CONSOLE_OVERLOADED'
+      const reason = is503
+        ? '服务不可用（503错误）。账户将暂时停止调度'
+        : '服务过载（529错误）。账户将暂时停止调度'
+
       const updates = {
         overloadedAt: new Date().toISOString(),
         overloadStatus: 'overloaded',
-        errorMessage: '服务过载（529错误）'
+        errorMessage
       }
 
       await client.hset(`${this.ACCOUNT_KEY_PREFIX}${accountId}`, updates)
@@ -928,15 +936,17 @@ class ClaudeConsoleAccountService {
           accountName: account.name || 'Claude Console Account',
           platform: 'claude-console',
           status: 'error',
-          errorCode: 'CLAUDE_CONSOLE_OVERLOADED',
-          reason: '服务过载（529错误）。账户将暂时停止调度',
+          errorCode,
+          reason,
           timestamp: new Date().toISOString()
         })
       } catch (webhookError) {
         logger.error('Failed to send overload webhook notification:', webhookError)
       }
 
-      logger.warn(`🚫 Claude Console account marked as overloaded: ${account.name} (${accountId})`)
+      logger.warn(
+        `🚫 Claude Console account marked as ${is503 ? 'unavailable' : 'overloaded'}: ${account.name} (${accountId})`
+      )
       return { success: true }
     } catch (error) {
       logger.error(`❌ Failed to mark Claude Console account as overloaded: ${accountId}`, error)
