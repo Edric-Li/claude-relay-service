@@ -577,6 +577,85 @@ router.get('/supported-clients', authenticateAdmin, async (req, res) => {
   }
 })
 
+/**
+ * 获取活跃的 API Keys（用于监控）
+ * GET /admin/api-keys/active
+ *
+ * 返回最近 2 分钟内使用过的 API Keys，包含今日请求数和费用
+ * 用于定时监控，检测异常增长
+ */
+router.get('/api-keys/active', authenticateAdmin, async (req, res) => {
+  try {
+    const now = new Date()
+    const cutoffTime = new Date(now.getTime() - 2 * 60 * 1000) // 2分钟内
+
+    // 获取所有非删除的 API Keys
+    const result = await redis.getApiKeysPaginated({
+      page: 1,
+      pageSize: 10000,
+      excludeDeleted: true
+    })
+
+    // 筛选 2 分钟内活跃的 Keys
+    const activeKeys = result.items.filter((key) => {
+      if (!key.lastUsedAt) return false
+      return new Date(key.lastUsedAt) >= cutoffTime
+    })
+
+    // 获取今日日期
+    const today = redis.getDateStringInTimezone()
+    const client = redis.getClientSafe()
+
+    // 并行获取统计数据
+    const activeKeysWithStats = await Promise.all(
+      activeKeys.map(async (key) => {
+        // 获取今日请求数
+        const pattern = `usage:${key.id}:model:daily:*:${today}`
+        let requests = 0
+
+        let cursor = '0'
+        const matchedKeys = []
+        do {
+          const [newCursor, scanKeys] = await client.scan(cursor, 'MATCH', pattern, 'COUNT', 100)
+          cursor = newCursor
+          matchedKeys.push(...scanKeys)
+        } while (cursor !== '0')
+
+        if (matchedKeys.length > 0) {
+          const pipeline = client.pipeline()
+          matchedKeys.forEach((k) => pipeline.hgetall(k))
+          const results = await pipeline.exec()
+          for (const [err, data] of results) {
+            if (!err && data) {
+              requests += parseInt(data.totalRequests || data.requests || 0)
+            }
+          }
+        }
+
+        // 获取今日费用
+        const cost = await redis.getDailyCost(key.id)
+
+        return {
+          id: key.id,
+          name: key.name,
+          requests,
+          cost
+        }
+      })
+    )
+
+    return res.json({
+      success: true,
+      timestamp: now.toISOString(),
+      count: activeKeysWithStats.length,
+      keys: activeKeysWithStats
+    })
+  } catch (error) {
+    logger.error('❌ Failed to get active API keys:', error)
+    return res.status(500).json({ success: false, error: error.message })
+  }
+})
+
 // 获取已存在的标签列表
 router.get('/api-keys/tags', authenticateAdmin, async (req, res) => {
   try {
