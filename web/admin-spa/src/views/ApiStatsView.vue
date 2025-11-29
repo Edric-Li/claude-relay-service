@@ -140,7 +140,7 @@
 </template>
 
 <script setup>
-import { onMounted, onUnmounted, watch, computed } from 'vue'
+import { onMounted, onUnmounted, watch, computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useApiStatsStore } from '@/stores/apistats'
