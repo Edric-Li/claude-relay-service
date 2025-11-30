@@ -1959,6 +1959,9 @@ const groupOptions = computed(() => {
 // 调度状态筛选选项
 const scheduleStatusOptions = ref([
   { value: 'all', label: '所有状态', icon: 'fa-circle' },
+  { value: 'normal', label: '正常运行', icon: 'fa-check-circle' },
+  { value: 'error', label: '有异常', icon: 'fa-exclamation-circle' },
+  { value: 'rate_limited', label: '限流中', icon: 'fa-hourglass-half' },
   { value: 'scheduling', label: '正在调度', icon: 'fa-play-circle' },
   { value: 'paused', label: '暂停调度', icon: 'fa-pause-circle' }
 ])
@@ -2095,15 +2098,48 @@ const closeAccountTestModal = () => {
   testingAccount.value = null
 }
 
+// 账户状态判断辅助函数
+const isAccountRateLimited = (account) =>
+  account.isRateLimited ||
+  account.status === 'rate_limited' ||
+  account.rateLimitStatus === 'limited' ||
+  account.rateLimitStatus?.isRateLimited
+
+const hasAccountError = (account) =>
+  account.status === 'unauthorized' ||
+  account.status === 'error' ||
+  account.status === 'blocked' ||
+  account.status === 'temp_error'
+
+const isAccountNormal = (account) =>
+  account.isActive && !hasAccountError(account) && !isAccountRateLimited(account)
+
+// 账户状态筛选函数
+const filterAccountByStatus = (account, filterValue) => {
+  switch (filterValue) {
+    case 'normal':
+      return isAccountNormal(account)
+    case 'error':
+      return hasAccountError(account)
+    case 'rate_limited':
+      return isAccountRateLimited(account)
+    case 'scheduling':
+      return account.schedulable !== false
+    case 'paused':
+      return account.schedulable === false
+    default:
+      return true
+  }
+}
+
 // 计算排序后的账户列表
 const sortedAccounts = computed(() => {
   let sourceAccounts = accounts.value
 
-  // 调度状态筛选：schedulable 为 false 表示暂停调度，其他情况（true/undefined）表示正在调度
+  // 调度状态筛选
   if (scheduleStatusFilter.value && scheduleStatusFilter.value !== 'all') {
-    const filterScheduling = scheduleStatusFilter.value === 'scheduling'
-    sourceAccounts = sourceAccounts.filter(
-      (account) => (account.schedulable !== false) === filterScheduling
+    sourceAccounts = sourceAccounts.filter((account) =>
+      filterAccountByStatus(account, scheduleStatusFilter.value)
     )
   }
 
