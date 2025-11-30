@@ -58,6 +58,21 @@
               />
             </div>
 
+            <!-- 调度状态筛选器 -->
+            <div class="group relative min-w-[140px]">
+              <div
+                class="absolute -inset-0.5 rounded-lg bg-gradient-to-r from-emerald-500 to-green-500 opacity-0 blur transition duration-300 group-hover:opacity-20"
+              ></div>
+              <CustomDropdown
+                v-model="scheduleStatusFilter"
+                icon="fa-toggle-on"
+                icon-color="text-emerald-500"
+                :options="scheduleStatusOptions"
+                placeholder="调度状态"
+                @change="filterByScheduleStatus"
+              />
+            </div>
+
             <!-- 搜索框 -->
             <div class="group relative min-w-[200px]">
               <div
@@ -1839,6 +1854,7 @@ const bindingCounts = ref({}) // 轻量级绑定计数，用于显示"绑定: X 
 const accountGroups = ref([])
 const groupFilter = ref('all')
 const platformFilter = ref('all')
+const scheduleStatusFilter = ref('all') // 调度状态筛选器
 const searchKeyword = ref('')
 const PAGE_SIZE_STORAGE_KEY = 'accountsPageSize'
 const getInitialPageSize = () => {
@@ -1939,6 +1955,13 @@ const groupOptions = computed(() => {
   })
   return options
 })
+
+// 调度状态筛选选项
+const scheduleStatusOptions = ref([
+  { value: 'all', label: '所有状态', icon: 'fa-circle' },
+  { value: 'scheduling', label: '正在调度', icon: 'fa-play-circle' },
+  { value: 'paused', label: '暂停调度', icon: 'fa-pause-circle' }
+])
 
 const shouldShowCheckboxes = computed(() => showCheckboxes.value)
 
@@ -2075,6 +2098,14 @@ const closeAccountTestModal = () => {
 // 计算排序后的账户列表
 const sortedAccounts = computed(() => {
   let sourceAccounts = accounts.value
+
+  // 调度状态筛选：schedulable 为 false 表示暂停调度，其他情况（true/undefined）表示正在调度
+  if (scheduleStatusFilter.value && scheduleStatusFilter.value !== 'all') {
+    const filterScheduling = scheduleStatusFilter.value === 'scheduling'
+    sourceAccounts = sourceAccounts.filter(
+      (account) => (account.schedulable !== false) === filterScheduling
+    )
+  }
 
   const keyword = searchKeyword.value.trim()
   if (keyword) {
@@ -2735,6 +2766,12 @@ const filterByPlatform = () => {
 const filterByGroup = () => {
   currentPage.value = 1
   loadAccounts()
+}
+
+// 按调度状态筛选账户
+const filterByScheduleStatus = () => {
+  currentPage.value = 1
+  // 调度状态筛选在前端 sortedAccounts 计算属性中处理，无需重新加载
 }
 
 // 规范化代理配置，支持字符串与对象
