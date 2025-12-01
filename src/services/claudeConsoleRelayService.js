@@ -13,7 +13,7 @@ const ConsoleErrorHandler = require('../utils/consoleErrorHandler')
 
 class ClaudeConsoleRelayService {
   constructor() {
-    this.defaultUserAgent = 'claude-cli/1.0.69 (external, cli)'
+    this.defaultUserAgent = 'claude-cli/2.0.52 (external, cli)'
   }
 
   // 🚀 转发请求到Claude Console API
@@ -1236,22 +1236,11 @@ class ClaudeConsoleRelayService {
     }
   }
 
-  // 🧪 测试账号连接（供Admin API使用，直接复用 _makeClaudeConsoleStreamRequest）
+  // 🧪 测试账号连接（供Admin API使用）
   async testAccountConnection(accountId, responseStream) {
-    const testRequestBody = {
-      model: 'claude-sonnet-4-5-20250929',
-      max_tokens: 100,
-      stream: true,
-      messages: [
-        {
-          role: 'user',
-          content: 'hi'
-        }
-      ]
-    }
+    const { sendStreamTestRequest } = require('../utils/testPayloadHelper')
 
     try {
-      // 获取账户信息
       const account = await claudeConsoleAccountService.getAccount(accountId)
       if (!account) {
         throw new Error('Account not found')
@@ -1259,48 +1248,32 @@ class ClaudeConsoleRelayService {
 
       logger.info(`🧪 Testing Claude Console account connection: ${account.name} (${accountId})`)
 
-      // 创建代理agent
-      const proxyAgent = claudeConsoleAccountService._createProxyAgent(account.proxy)
+      const cleanUrl = account.apiUrl.replace(/\/$/, '')
+      const apiUrl = cleanUrl.endsWith('/v1/messages')
+        ? cleanUrl
+        : `${cleanUrl}/v1/messages?beta=true`
 
-      // 设置响应头
+      await sendStreamTestRequest({
+        apiUrl,
+        authorization: `Bearer ${account.apiKey}`,
+        responseStream,
+        proxyAgent: claudeConsoleAccountService._createProxyAgent(account.proxy),
+        extraHeaders: account.userAgent ? { 'User-Agent': account.userAgent } : {}
+      })
+    } catch (error) {
+      logger.error(`❌ Test account connection failed:`, error)
       if (!responseStream.headersSent) {
         responseStream.writeHead(200, {
           'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache',
-          Connection: 'keep-alive',
-          'X-Accel-Buffering': 'no'
+          'Cache-Control': 'no-cache'
         })
       }
-
-      // 创建流转换器，将 Claude API 格式转换为前端测试页面期望的格式
-      const streamTransformer = this._createTestStreamTransformer()
-
-      // 直接复用现有的流式请求方法
-      await this._makeClaudeConsoleStreamRequest(
-        testRequestBody,
-        account,
-        proxyAgent,
-        {}, // clientHeaders - 测试不需要客户端headers
-        responseStream,
-        accountId,
-        null, // usageCallback - 测试不需要统计
-        streamTransformer, // 使用转换器将 Claude API 格式转为前端期望格式
-        {} // requestOptions
-      )
-
-      logger.info(`✅ Test request completed for account: ${account.name}`)
-    } catch (error) {
-      logger.error(`❌ Test account connection failed:`, error)
-      // 发送错误事件给前端
       if (!responseStream.destroyed && !responseStream.writableEnded) {
-        try {
-          const errorMsg = error.message || '测试失败'
-          responseStream.write(`data: ${JSON.stringify({ type: 'error', error: errorMsg })}\n\n`)
-        } catch {
-          // 忽略写入错误
-        }
+        responseStream.write(
+          `data: ${JSON.stringify({ type: 'test_complete', success: false, error: error.message })}\n\n`
+        )
+        responseStream.end()
       }
-      throw error
     }
   }
 
