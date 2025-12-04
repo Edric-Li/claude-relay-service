@@ -38,6 +38,8 @@ class ClaudeConsoleRelayService {
         throw new Error('Claude Console Claude account not found')
       }
 
+      const autoProtectionDisabled = account.disableAutoProtection === true
+
       logger.info(
         `📤 Processing Claude Console API request for key: ${apiKeyData.name || apiKeyData.id}, account: ${account.name} (${accountId}), request: ${requestId}`
       )
@@ -260,7 +262,9 @@ class ClaudeConsoleRelayService {
           logger.error(
             `🚫 Marking Console account ${accountId} as unauthorized: ${decision.errorType} (${decision.errorCount}/${decision.threshold})`
           )
-          await claudeConsoleAccountService.markAccountUnauthorized(accountId)
+          if (!autoProtectionDisabled) {
+            await claudeConsoleAccountService.markAccountUnauthorized(accountId)
+          }
         } else {
           logger.warn(
             `⚠️ Upstream 401 for Console account ${accountId}, not marking as unauthorized yet (${decision.errorCount}/${decision.threshold})`
@@ -269,13 +273,18 @@ class ClaudeConsoleRelayService {
       } else if (accountDisabledError) {
         // 账号禁用错误（400）- 这是永久性错误，立即标记
         logger.error(
-          `🚫 Account disabled error (400) detected for Claude Console account ${accountId}, marking as blocked`
+          `🚫 Account disabled error (400) detected for Claude Console account ${accountId}${autoProtectionDisabled ? ' (auto-protection disabled, skipping status change)' : ''}`
         )
         // 传入完整的错误详情到 webhook
         const errorDetails =
           typeof response.data === 'string' ? response.data : JSON.stringify(response.data)
-        await claudeConsoleAccountService.markConsoleAccountBlocked(accountId, errorDetails)
+        if (!autoProtectionDisabled) {
+          await claudeConsoleAccountService.markConsoleAccountBlocked(accountId, errorDetails)
+        }
       } else if (response.status === 429) {
+        logger.warn(
+          `🚫 Rate limit detected for Claude Console account ${accountId}${autoProtectionDisabled ? ' (auto-protection disabled, skipping status change)' : ''}`
+        )
         // 收到429先检查是否因为超过了手动配置的每日额度
         await claudeConsoleAccountService.checkQuotaUsage(accountId).catch((err) => {
           logger.error('❌ Failed to check quota after 429 error:', err)
@@ -292,7 +301,9 @@ class ClaudeConsoleRelayService {
           logger.error(
             `🚫 Marking Console account ${accountId} as rate limited (${decision.errorCount}/${decision.threshold})`
           )
-          await claudeConsoleAccountService.markAccountRateLimited(accountId)
+          if (!autoProtectionDisabled) {
+            await claudeConsoleAccountService.markAccountRateLimited(accountId)
+          }
         } else {
           logger.warn(
             `⚠️ Upstream 429 for Console account ${accountId}, not marking as rate limited yet (${decision.errorCount}/${decision.threshold})`
@@ -310,7 +321,9 @@ class ClaudeConsoleRelayService {
           logger.error(
             `🚫 Marking Console account ${accountId} as overloaded (${decision.errorCount}/${decision.threshold})`
           )
-          await claudeConsoleAccountService.markAccountOverloaded(accountId)
+          if (!autoProtectionDisabled) {
+            await claudeConsoleAccountService.markAccountOverloaded(accountId)
+          }
         } else {
           logger.warn(
             `⚠️ Upstream 529 for Console account ${accountId}, not marking as overloaded yet (${decision.errorCount}/${decision.threshold})`
@@ -330,7 +343,9 @@ class ClaudeConsoleRelayService {
             `🚫 Marking Console account ${accountId} as unavailable due to 503 (${decision.errorCount}/${decision.threshold})`
           )
           // 复用 overload 机制处理 503，因为恢复策略相同（10分钟）
-          await claudeConsoleAccountService.markAccountOverloaded(accountId, '503')
+          if (!autoProtectionDisabled) {
+            await claudeConsoleAccountService.markAccountOverloaded(accountId, '503')
+          }
         } else {
           logger.warn(
             `⚠️ Upstream 503 for Console account ${accountId}, not marking as unavailable yet (${decision.errorCount}/${decision.threshold})`
@@ -667,6 +682,7 @@ class ClaudeConsoleRelayService {
             })
 
             response.data.on('end', async () => {
+              const autoProtectionDisabled = account.disableAutoProtection === true
               // 记录原始错误消息到日志（方便调试，包含供应商信息）
               logger.error(
                 `📝 [Stream] Upstream error response from ${account?.name || accountId}: ${errorDataForCheck.substring(0, 500)}`
@@ -680,6 +696,7 @@ class ClaudeConsoleRelayService {
 
               // 🛡️ 智能错误处理（流式请求）
               if (response.status === 401) {
+<<<<<<< HEAD
                 // 使用智能判断：区分Console API Key问题和上游池子问题
                 const decision = await ConsoleErrorHandler.shouldMarkAccountUnavailable(
                   accountId,
@@ -696,18 +713,30 @@ class ClaudeConsoleRelayService {
                   logger.warn(
                     `⚠️ [Stream] Upstream 401 for Console account ${accountId}, not marking yet (${decision.errorCount}/${decision.threshold})`
                   )
+=======
+                logger.warn(
+                  `🚫 [Stream] Unauthorized error detected for Claude Console account ${accountId}${autoProtectionDisabled ? ' (auto-protection disabled, skipping status change)' : ''}`
+                )
+                if (!autoProtectionDisabled) {
+                  await claudeConsoleAccountService.markAccountUnauthorized(accountId)
+>>>>>>> 8aca1f9d (feat(account): 新增账户自动防护禁用开关)
                 }
               } else if (accountDisabledError) {
                 // 账号禁用错误（400）- 这是永久性错误，立即标记
                 logger.error(
-                  `🚫 [Stream] Account disabled error (400) detected for Claude Console account ${accountId}, marking as blocked`
+                  `🚫 [Stream] Account disabled error (400) detected for Claude Console account ${accountId}${autoProtectionDisabled ? ' (auto-protection disabled, skipping status change)' : ''}`
                 )
                 // 传入完整的错误详情到 webhook
-                await claudeConsoleAccountService.markConsoleAccountBlocked(
-                  accountId,
-                  errorDataForCheck
-                )
+                if (!autoProtectionDisabled) {
+                  await claudeConsoleAccountService.markConsoleAccountBlocked(
+                    accountId,
+                    errorDataForCheck
+                  )
+                }
               } else if (response.status === 429) {
+                logger.warn(
+                  `🚫 [Stream] Rate limit detected for Claude Console account ${accountId}${autoProtectionDisabled ? ' (auto-protection disabled, skipping status change)' : ''}`
+                )
                 // 检查是否因为超过每日额度
                 claudeConsoleAccountService.checkQuotaUsage(accountId).catch((err) => {
                   logger.error('❌ Failed to check quota after 429 error:', err)
@@ -724,7 +753,9 @@ class ClaudeConsoleRelayService {
                   logger.error(
                     `🚫 [Stream] Marking Console account ${accountId} as rate limited (${decision.errorCount}/${decision.threshold})`
                   )
-                  await claudeConsoleAccountService.markAccountRateLimited(accountId)
+                  if (!autoProtectionDisabled) {
+                    await claudeConsoleAccountService.markAccountRateLimited(accountId)
+                  }
                 } else {
                   logger.warn(
                     `⚠️ [Stream] Upstream 429 for Console account ${accountId}, not marking yet (${decision.errorCount}/${decision.threshold})`
@@ -742,7 +773,9 @@ class ClaudeConsoleRelayService {
                   logger.error(
                     `🚫 [Stream] Marking Console account ${accountId} as overloaded (${decision.errorCount}/${decision.threshold})`
                   )
-                  await claudeConsoleAccountService.markAccountOverloaded(accountId)
+                  if (!autoProtectionDisabled) {
+                    await claudeConsoleAccountService.markAccountOverloaded(accountId)
+                  }
                 } else {
                   logger.warn(
                     `⚠️ [Stream] Upstream 529 for Console account ${accountId}, not marking yet (${decision.errorCount}/${decision.threshold})`
