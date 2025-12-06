@@ -696,7 +696,6 @@ class ClaudeConsoleRelayService {
 
               // 🛡️ 智能错误处理（流式请求）
               if (response.status === 401) {
-<<<<<<< HEAD
                 // 使用智能判断：区分Console API Key问题和上游池子问题
                 const decision = await ConsoleErrorHandler.shouldMarkAccountUnavailable(
                   accountId,
@@ -706,20 +705,15 @@ class ClaudeConsoleRelayService {
 
                 if (decision.shouldMarkUnavailable) {
                   logger.error(
-                    `🚫 [Stream] Marking Console account ${accountId} as unauthorized: ${decision.errorType} (${decision.errorCount}/${decision.threshold})`
+                    `🚫 [Stream] Marking Console account ${accountId} as unauthorized: ${decision.errorType} (${decision.errorCount}/${decision.threshold})${autoProtectionDisabled ? ' (auto-protection disabled, skipping status change)' : ''}`
                   )
-                  await claudeConsoleAccountService.markAccountUnauthorized(accountId)
+                  if (!autoProtectionDisabled) {
+                    await claudeConsoleAccountService.markAccountUnauthorized(accountId)
+                  }
                 } else {
                   logger.warn(
                     `⚠️ [Stream] Upstream 401 for Console account ${accountId}, not marking yet (${decision.errorCount}/${decision.threshold})`
                   )
-=======
-                logger.warn(
-                  `🚫 [Stream] Unauthorized error detected for Claude Console account ${accountId}${autoProtectionDisabled ? ' (auto-protection disabled, skipping status change)' : ''}`
-                )
-                if (!autoProtectionDisabled) {
-                  await claudeConsoleAccountService.markAccountUnauthorized(accountId)
->>>>>>> 8aca1f9d (feat(account): 新增账户自动防护禁用开关)
                 }
               } else if (accountDisabledError) {
                 // 账号禁用错误（400）- 这是永久性错误，立即标记
