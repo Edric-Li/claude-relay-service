@@ -2441,40 +2441,6 @@ const closeAccountTestModal = () => {
   testingAccount.value = null
 }
 
-// 账户状态判断辅助函数
-const isAccountRateLimited = (account) =>
-  account.isRateLimited ||
-  account.status === 'rate_limited' ||
-  account.rateLimitStatus === 'limited' ||
-  account.rateLimitStatus?.isRateLimited
-
-const hasAccountError = (account) =>
-  account.status === 'unauthorized' ||
-  account.status === 'error' ||
-  account.status === 'blocked' ||
-  account.status === 'temp_error'
-
-const isAccountNormal = (account) =>
-  account.isActive && !hasAccountError(account) && !isAccountRateLimited(account)
-
-// 账户状态筛选函数
-const filterAccountByStatus = (account, filterValue) => {
-  switch (filterValue) {
-    case 'normal':
-      return isAccountNormal(account)
-    case 'error':
-      return hasAccountError(account)
-    case 'rate_limited':
-      return isAccountRateLimited(account)
-    case 'scheduling':
-      return account.schedulable !== false
-    case 'paused':
-      return account.schedulable === false
-    default:
-      return true
-  }
-}
-
 // 计算排序后的账户列表
 const sortedAccounts = computed(() => {
   let sourceAccounts = accounts.value
