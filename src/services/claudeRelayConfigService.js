@@ -15,6 +15,10 @@ const DEFAULT_CONFIG = {
   globalSessionBindingEnabled: false,
   sessionBindingErrorMessage: '你的本地session已污染，请清理后使用。',
   sessionBindingTtlDays: 30, // 会话绑定 TTL（天），默认30天
+  // 非 Claude Code 客户端降级配置
+  nonClaudeCodeFallbackEnabled: false, // 是否启用降级（而非直接拒绝）
+  nonClaudeCodeFallbackAccountId: null, // 降级账户 ID
+  nonClaudeCodeFallbackAccountType: null, // 降级账户类型 (claude-official/claude-console/bedrock/ccr)
   updatedAt: null,
   updatedBy: null
 }
@@ -135,6 +139,84 @@ class ClaudeRelayConfigService {
   async getSessionBindingErrorMessage() {
     const cfg = await this.getConfig()
     return cfg.sessionBindingErrorMessage || DEFAULT_CONFIG.sessionBindingErrorMessage
+  }
+
+  /**
+   * 检查是否启用非 Claude Code 客户端降级
+   * @returns {Promise<boolean>}
+   */
+  async isNonClaudeCodeFallbackEnabled() {
+    const cfg = await this.getConfig()
+    return cfg.nonClaudeCodeFallbackEnabled === true
+  }
+
+  /**
+   * 获取非 Claude Code 客户端降级账户配置
+   * @returns {Promise<{accountId: string|null, accountType: string|null}>}
+   */
+  async getNonClaudeCodeFallbackAccount() {
+    const cfg = await this.getConfig()
+    return {
+      accountId: cfg.nonClaudeCodeFallbackAccountId || null,
+      accountType: cfg.nonClaudeCodeFallbackAccountType || null
+    }
+  }
+
+  /**
+   * 验证降级账户配置是否有效
+   * @returns {Promise<{valid: boolean, error?: string}>}
+   */
+  async validateFallbackAccount() {
+    const cfg = await this.getConfig()
+
+    if (!cfg.nonClaudeCodeFallbackEnabled) {
+      return { valid: true } // 未启用时不需要验证
+    }
+
+    if (!cfg.nonClaudeCodeFallbackAccountId || !cfg.nonClaudeCodeFallbackAccountType) {
+      return { valid: false, error: 'Fallback account not configured' }
+    }
+
+    try {
+      let accountService
+      switch (cfg.nonClaudeCodeFallbackAccountType) {
+        case 'claude-official':
+          accountService = require('./claudeAccountService')
+          break
+        case 'claude-console':
+          accountService = require('./claudeConsoleAccountService')
+          break
+        case 'bedrock':
+          accountService = require('./bedrockAccountService')
+          break
+        case 'ccr':
+          accountService = require('./ccrAccountService')
+          break
+        default:
+          return {
+            valid: false,
+            error: `Unknown account type: ${cfg.nonClaudeCodeFallbackAccountType}`
+          }
+      }
+
+      const account = await accountService.getAccount(cfg.nonClaudeCodeFallbackAccountId)
+      if (!account) {
+        return { valid: false, error: 'Fallback account not found' }
+      }
+
+      // 检查账户是否激活（兼容不同服务的返回格式）
+      const accountData = account.data || account
+      const isActive = accountData.isActive === true || accountData.isActive === 'true'
+
+      if (!isActive) {
+        return { valid: false, error: 'Fallback account is not active' }
+      }
+
+      return { valid: true }
+    } catch (error) {
+      logger.error('❌ Failed to validate fallback account:', error)
+      return { valid: false, error: error.message }
+    }
   }
 
   /**

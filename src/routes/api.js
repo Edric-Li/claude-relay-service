@@ -263,40 +263,50 @@ async function handleMessagesRequest(req, res) {
       const requestedModel = req.body.model
       let accountId
       let accountType
-      try {
-        const selection = await unifiedClaudeScheduler.selectAccountForApiKey(
-          req.apiKey,
-          sessionHash,
-          requestedModel,
-          forcedAccount
+
+      // 🔄 检查是否需要使用降级账户（非 Claude Code 客户端）
+      if (req.nonClaudeCodeFallback && req.nonClaudeCodeFallback.enabled) {
+        // 直接使用降级账户，跳过正常调度
+        ;({ accountId, accountType } = req.nonClaudeCodeFallback)
+        logger.api(
+          `🔄 Using fallback account for non-Claude Code client: ${accountId} (${accountType})`
         )
-        ;({ accountId, accountType } = selection)
-      } catch (error) {
-        // 处理会话绑定账户不可用的错误
-        if (error.code === 'SESSION_BINDING_ACCOUNT_UNAVAILABLE') {
-          const errorMessage = await claudeRelayConfigService.getSessionBindingErrorMessage()
-          return res.status(403).json({
-            error: {
-              type: 'session_binding_error',
-              message: errorMessage
-            }
-          })
-        }
-        if (error.code === 'CLAUDE_DEDICATED_RATE_LIMITED') {
-          const limitMessage = claudeRelayService._buildStandardRateLimitMessage(
-            error.rateLimitEndAt
+      } else {
+        try {
+          const selection = await unifiedClaudeScheduler.selectAccountForApiKey(
+            req.apiKey,
+            sessionHash,
+            requestedModel,
+            forcedAccount
           )
-          res.status(403)
-          res.setHeader('Content-Type', 'application/json')
-          res.end(
-            JSON.stringify({
-              error: 'upstream_rate_limited',
-              message: limitMessage
+          ;({ accountId, accountType } = selection)
+        } catch (error) {
+          // 处理会话绑定账户不可用的错误
+          if (error.code === 'SESSION_BINDING_ACCOUNT_UNAVAILABLE') {
+            const errorMessage = await claudeRelayConfigService.getSessionBindingErrorMessage()
+            return res.status(403).json({
+              error: {
+                type: 'session_binding_error',
+                message: errorMessage
+              }
             })
-          )
-          return
+          }
+          if (error.code === 'CLAUDE_DEDICATED_RATE_LIMITED') {
+            const limitMessage = claudeRelayService._buildStandardRateLimitMessage(
+              error.rateLimitEndAt
+            )
+            res.status(403)
+            res.setHeader('Content-Type', 'application/json')
+            res.end(
+              JSON.stringify({
+                error: 'upstream_rate_limited',
+                message: limitMessage
+              })
+            )
+            return
+          }
+          throw error
         }
-        throw error
       }
 
       // 🔗 在成功调度后建立会话绑定（仅 claude-official 类型）
@@ -719,34 +729,44 @@ async function handleMessagesRequest(req, res) {
       const requestedModel = req.body.model
       let accountId
       let accountType
-      try {
-        const selection = await unifiedClaudeScheduler.selectAccountForApiKey(
-          req.apiKey,
-          sessionHash,
-          requestedModel,
-          forcedAccountNonStream
+
+      // 🔄 检查是否需要使用降级账户（非 Claude Code 客户端）
+      if (req.nonClaudeCodeFallback && req.nonClaudeCodeFallback.enabled) {
+        // 直接使用降级账户，跳过正常调度
+        ;({ accountId, accountType } = req.nonClaudeCodeFallback)
+        logger.api(
+          `🔄 Using fallback account for non-Claude Code client (non-stream): ${accountId} (${accountType})`
         )
-        ;({ accountId, accountType } = selection)
-      } catch (error) {
-        if (error.code === 'SESSION_BINDING_ACCOUNT_UNAVAILABLE') {
-          const errorMessage = await claudeRelayConfigService.getSessionBindingErrorMessage()
-          return res.status(403).json({
-            error: {
-              type: 'session_binding_error',
-              message: errorMessage
-            }
-          })
-        }
-        if (error.code === 'CLAUDE_DEDICATED_RATE_LIMITED') {
-          const limitMessage = claudeRelayService._buildStandardRateLimitMessage(
-            error.rateLimitEndAt
+      } else {
+        try {
+          const selection = await unifiedClaudeScheduler.selectAccountForApiKey(
+            req.apiKey,
+            sessionHash,
+            requestedModel,
+            forcedAccountNonStream
           )
-          return res.status(403).json({
-            error: 'upstream_rate_limited',
-            message: limitMessage
-          })
+          ;({ accountId, accountType } = selection)
+        } catch (error) {
+          if (error.code === 'SESSION_BINDING_ACCOUNT_UNAVAILABLE') {
+            const errorMessage = await claudeRelayConfigService.getSessionBindingErrorMessage()
+            return res.status(403).json({
+              error: {
+                type: 'session_binding_error',
+                message: errorMessage
+              }
+            })
+          }
+          if (error.code === 'CLAUDE_DEDICATED_RATE_LIMITED') {
+            const limitMessage = claudeRelayService._buildStandardRateLimitMessage(
+              error.rateLimitEndAt
+            )
+            return res.status(403).json({
+              error: 'upstream_rate_limited',
+              message: limitMessage
+            })
+          }
+          throw error
         }
-        throw error
       }
 
       // 🔗 在成功调度后建立会话绑定（非流式，仅 claude-official 类型）

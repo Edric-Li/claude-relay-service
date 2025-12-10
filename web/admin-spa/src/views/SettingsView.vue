@@ -704,6 +704,119 @@
                   </div>
                 </div>
               </div>
+
+              <!-- 非 Claude Code 客户端降级配置（仅在启用 Claude Code 限制时显示） -->
+              <div
+                v-if="claudeConfig.claudeCodeOnlyEnabled"
+                class="mt-6 border-t border-gray-200 pt-6 dark:border-gray-600"
+              >
+                <div class="flex items-center justify-between">
+                  <div>
+                    <div class="flex items-center">
+                      <div
+                        class="mr-3 flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-cyan-500 to-teal-600 text-white shadow-md"
+                      >
+                        <i class="fas fa-random text-sm"></i>
+                      </div>
+                      <div>
+                        <h3 class="text-base font-medium text-gray-800 dark:text-gray-200">
+                          启用降级账户
+                        </h3>
+                        <p class="mt-0.5 text-xs text-gray-600 dark:text-gray-400">
+                          非 Claude Code 客户端请求不直接拒绝，而是路由到指定账户
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <label class="relative inline-flex cursor-pointer items-center">
+                    <input
+                      v-model="claudeConfig.nonClaudeCodeFallbackEnabled"
+                      class="peer sr-only"
+                      type="checkbox"
+                      @change="saveClaudeConfig"
+                    />
+                    <div
+                      class="peer h-6 w-11 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-teal-500 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-teal-300 dark:border-gray-600 dark:bg-gray-700 dark:peer-focus:ring-teal-800"
+                    ></div>
+                  </label>
+                </div>
+
+                <!-- 降级账户选择（仅在启用时显示） -->
+                <div
+                  v-if="claudeConfig.nonClaudeCodeFallbackEnabled"
+                  class="mt-4 space-y-4 rounded-lg bg-gray-50 p-4 dark:bg-gray-700/50"
+                >
+                  <!-- 账户类型选择 -->
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      <i class="fas fa-layer-group mr-2 text-gray-400"></i>
+                      账户类型
+                    </label>
+                    <select
+                      v-model="claudeConfig.nonClaudeCodeFallbackAccountType"
+                      class="mt-1 block w-full max-w-xs rounded-lg border border-gray-300 bg-white px-3 py-2 shadow-sm focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 dark:border-gray-500 dark:bg-gray-600 dark:text-white sm:text-sm"
+                      @change="onFallbackAccountTypeChange"
+                    >
+                      <option value="">请选择账户类型</option>
+                      <option value="claude-official">Claude 官方账户</option>
+                      <option value="claude-console">Claude Console 账户</option>
+                      <option value="bedrock">AWS Bedrock 账户</option>
+                      <option value="ccr">CCR 账户</option>
+                    </select>
+                  </div>
+
+                  <!-- 账户选择下拉框 -->
+                  <div v-if="claudeConfig.nonClaudeCodeFallbackAccountType">
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      <i class="fas fa-user-circle mr-2 text-gray-400"></i>
+                      选择账户
+                    </label>
+                    <div class="relative mt-1">
+                      <select
+                        v-model="claudeConfig.nonClaudeCodeFallbackAccountId"
+                        class="block w-full max-w-md rounded-lg border border-gray-300 bg-white px-3 py-2 shadow-sm focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 dark:border-gray-500 dark:bg-gray-600 dark:text-white sm:text-sm"
+                        :disabled="fallbackAccountsLoading"
+                        @change="saveClaudeConfig"
+                      >
+                        <option value="">
+                          {{ fallbackAccountsLoading ? '加载中...' : '请选择账户' }}
+                        </option>
+                        <option
+                          v-for="account in fallbackAccountsList"
+                          :key="account.id"
+                          :value="account.id"
+                        >
+                          {{ account.name || account.id }}
+                          <template v-if="account.email"> ({{ account.email }})</template>
+                          <template v-if="!account.isActive"> [已禁用]</template>
+                        </option>
+                      </select>
+                      <div
+                        v-if="fallbackAccountsLoading"
+                        class="pointer-events-none absolute inset-y-0 right-8 flex items-center"
+                      >
+                        <i class="fas fa-spinner fa-spin text-gray-400"></i>
+                      </div>
+                    </div>
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      选择一个账户作为非 Claude Code 客户端的降级目标
+                    </p>
+                  </div>
+                </div>
+
+                <div class="mt-4 rounded-lg bg-cyan-50 p-4 dark:bg-cyan-900/20">
+                  <div class="flex">
+                    <i class="fas fa-lightbulb mt-0.5 text-cyan-500"></i>
+                    <div class="ml-3">
+                      <p class="text-sm text-cyan-700 dark:text-cyan-300">
+                        <strong>使用场景：</strong>将 Claude Code 客户端的请求路由到稳定账户， 非
+                        Claude Code 客户端（如浏览器、第三方应用）的请求路由到指定的降级账户，
+                        既保证核心用户体验，又支持其他客户端的使用。
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <!-- 全局会话绑定 -->
@@ -1469,9 +1582,14 @@ const claudeConfig = ref({
   globalSessionBindingEnabled: false,
   sessionBindingErrorMessage: '你的本地session已污染，请清理后使用。',
   sessionBindingTtlDays: 30,
+  nonClaudeCodeFallbackEnabled: false,
+  nonClaudeCodeFallbackAccountId: null,
+  nonClaudeCodeFallbackAccountType: null,
   updatedAt: null,
   updatedBy: null
 })
+const fallbackAccountsLoading = ref(false)
+const fallbackAccountsList = ref([])
 
 // 平台表单相关
 const showAddPlatformModal = ref(false)
@@ -1738,8 +1856,16 @@ const loadClaudeConfig = async () => {
         sessionBindingErrorMessage:
           response.config?.sessionBindingErrorMessage || '你的本地session已污染，请清理后使用。',
         sessionBindingTtlDays: response.config?.sessionBindingTtlDays ?? 30,
+        nonClaudeCodeFallbackEnabled: response.config?.nonClaudeCodeFallbackEnabled ?? false,
+        nonClaudeCodeFallbackAccountId: response.config?.nonClaudeCodeFallbackAccountId || null,
+        nonClaudeCodeFallbackAccountType: response.config?.nonClaudeCodeFallbackAccountType || null,
         updatedAt: response.config?.updatedAt || null,
         updatedBy: response.config?.updatedBy || null
+      }
+
+      // 如果已有配置的账户类型，加载对应的账户列表
+      if (claudeConfig.value.nonClaudeCodeFallbackAccountType) {
+        loadFallbackAccounts(claudeConfig.value.nonClaudeCodeFallbackAccountType)
       }
     }
   } catch (error) {
@@ -1762,7 +1888,10 @@ const saveClaudeConfig = async () => {
       claudeCodeOnlyEnabled: claudeConfig.value.claudeCodeOnlyEnabled,
       globalSessionBindingEnabled: claudeConfig.value.globalSessionBindingEnabled,
       sessionBindingErrorMessage: claudeConfig.value.sessionBindingErrorMessage,
-      sessionBindingTtlDays: claudeConfig.value.sessionBindingTtlDays
+      sessionBindingTtlDays: claudeConfig.value.sessionBindingTtlDays,
+      nonClaudeCodeFallbackEnabled: claudeConfig.value.nonClaudeCodeFallbackEnabled,
+      nonClaudeCodeFallbackAccountId: claudeConfig.value.nonClaudeCodeFallbackAccountId,
+      nonClaudeCodeFallbackAccountType: claudeConfig.value.nonClaudeCodeFallbackAccountType
     }
 
     const response = await apiClient.put('/admin/claude-relay-config', payload, {
@@ -1781,6 +1910,65 @@ const saveClaudeConfig = async () => {
     if (!isMounted.value) return
     showToast('保存 Claude 转发配置失败', 'error')
     console.error(error)
+  }
+}
+
+// 切换降级账户类型时清空账户ID并加载账户列表
+const onFallbackAccountTypeChange = async () => {
+  claudeConfig.value.nonClaudeCodeFallbackAccountId = null
+  fallbackAccountsList.value = []
+
+  if (claudeConfig.value.nonClaudeCodeFallbackAccountType) {
+    await loadFallbackAccounts(claudeConfig.value.nonClaudeCodeFallbackAccountType)
+  }
+
+  saveClaudeConfig()
+}
+
+// 加载指定类型的账户列表
+const loadFallbackAccounts = async (accountType) => {
+  if (!isMounted.value) return
+  fallbackAccountsLoading.value = true
+  fallbackAccountsList.value = []
+
+  try {
+    // 根据账户类型调用不同的 API
+    let endpoint = ''
+    switch (accountType) {
+      case 'claude-official':
+        endpoint = '/admin/claude-accounts'
+        break
+      case 'claude-console':
+        endpoint = '/admin/claude-console-accounts'
+        break
+      case 'bedrock':
+        endpoint = '/admin/bedrock-accounts'
+        break
+      case 'ccr':
+        endpoint = '/admin/ccr-accounts'
+        break
+      default:
+        return
+    }
+
+    const response = await apiClient.get(endpoint, {
+      signal: abortController.value.signal
+    })
+
+    if (isMounted.value) {
+      // 处理不同 API 返回格式
+      const accounts = response.accounts || response.data || response || []
+      fallbackAccountsList.value = Array.isArray(accounts) ? accounts : []
+    }
+  } catch (error) {
+    if (error.name === 'AbortError') return
+    if (!isMounted.value) return
+    showToast('加载账户列表失败', 'error')
+    console.error(error)
+  } finally {
+    if (isMounted.value) {
+      fallbackAccountsLoading.value = false
+    }
   }
 }
 

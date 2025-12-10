@@ -228,20 +228,85 @@ const authenticateApiKey = async (req, res, next) => {
 
             if (!isClaudeCode) {
               const clientIP = req.ip || req.connection?.remoteAddress || 'unknown'
-              logger.api(
-                `❌ Claude Code client validation failed (global: ${globalClaudeCodeOnly}, key: ${keyClaudeCodeOnly}) from ${clientIP}`
-              )
-              return res.status(403).json({
-                error: {
-                  type: 'client_validation_error',
-                  message: 'This endpoint only accepts requests from Claude Code CLI'
-                }
-              })
-            }
 
-            logger.api(
-              `✅ Claude Code client validated (global: ${globalClaudeCodeOnly}, key: ${keyClaudeCodeOnly})`
-            )
+              // 🔄 检查是否启用了降级账户功能（仅全局限制时可用）
+              if (globalClaudeCodeOnly) {
+                const fallbackEnabled =
+                  await claudeRelayConfigService.isNonClaudeCodeFallbackEnabled()
+
+                if (fallbackEnabled) {
+                  const fallbackAccount =
+                    await claudeRelayConfigService.getNonClaudeCodeFallbackAccount()
+
+                  if (fallbackAccount.accountId && fallbackAccount.accountType) {
+                    // 🔍 验证降级账户是否可用
+                    const fallbackValidation =
+                      await claudeRelayConfigService.validateFallbackAccount()
+
+                    if (fallbackValidation.valid) {
+                      // 标记请求为非 Claude Code 客户端，使用降级账户
+                      req.nonClaudeCodeFallback = {
+                        enabled: true,
+                        accountId: fallbackAccount.accountId,
+                        accountType: fallbackAccount.accountType
+                      }
+                      logger.api(
+                        `🔄 Non-Claude Code client detected, routing to fallback account: ${fallbackAccount.accountId} (${fallbackAccount.accountType}) from ${clientIP}`
+                      )
+                      // 不拒绝，继续处理
+                    } else {
+                      // 降级账户不可用，按原逻辑拒绝
+                      logger.api(
+                        `❌ Claude Code client validation failed, fallback account unavailable (${fallbackValidation.error}), from ${clientIP}`
+                      )
+                      return res.status(403).json({
+                        error: {
+                          type: 'client_validation_error',
+                          message: 'This endpoint only accepts requests from Claude Code CLI'
+                        }
+                      })
+                    }
+                  } else {
+                    // 降级账户未配置，按原逻辑拒绝
+                    logger.api(
+                      `❌ Claude Code client validation failed (global: ${globalClaudeCodeOnly}, key: ${keyClaudeCodeOnly}), fallback account not configured, from ${clientIP}`
+                    )
+                    return res.status(403).json({
+                      error: {
+                        type: 'client_validation_error',
+                        message: 'This endpoint only accepts requests from Claude Code CLI'
+                      }
+                    })
+                  }
+                } else {
+                  // 降级功能未启用，按原逻辑拒绝
+                  logger.api(
+                    `❌ Claude Code client validation failed (global: ${globalClaudeCodeOnly}, key: ${keyClaudeCodeOnly}) from ${clientIP}`
+                  )
+                  return res.status(403).json({
+                    error: {
+                      type: 'client_validation_error',
+                      message: 'This endpoint only accepts requests from Claude Code CLI'
+                    }
+                  })
+                }
+              } else {
+                // API Key 级别限制不支持降级，直接拒绝
+                logger.api(
+                  `❌ Claude Code client validation failed (global: ${globalClaudeCodeOnly}, key: ${keyClaudeCodeOnly}) from ${clientIP}`
+                )
+                return res.status(403).json({
+                  error: {
+                    type: 'client_validation_error',
+                    message: 'This endpoint only accepts requests from Claude Code CLI'
+                  }
+                })
+              }
+            } else {
+              logger.api(
+                `✅ Claude Code client validated (global: ${globalClaudeCodeOnly}, key: ${keyClaudeCodeOnly})`
+              )
+            }
           }
         } catch (error) {
           logger.error('❌ Error checking Claude Code restriction:', error)

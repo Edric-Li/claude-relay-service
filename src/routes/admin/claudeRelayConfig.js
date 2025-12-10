@@ -40,7 +40,10 @@ router.put('/claude-relay-config', authenticateAdmin, async (req, res) => {
       claudeCodeOnlyEnabled,
       globalSessionBindingEnabled,
       sessionBindingErrorMessage,
-      sessionBindingTtlDays
+      sessionBindingTtlDays,
+      nonClaudeCodeFallbackEnabled,
+      nonClaudeCodeFallbackAccountId,
+      nonClaudeCodeFallbackAccountType
     } = req.body
 
     // 验证输入
@@ -78,6 +81,32 @@ router.put('/claude-relay-config', authenticateAdmin, async (req, res) => {
       }
     }
 
+    // 验证降级账户配置
+    if (
+      nonClaudeCodeFallbackEnabled !== undefined &&
+      typeof nonClaudeCodeFallbackEnabled !== 'boolean'
+    ) {
+      return res.status(400).json({ error: 'nonClaudeCodeFallbackEnabled must be a boolean' })
+    }
+
+    if (nonClaudeCodeFallbackAccountId !== undefined && nonClaudeCodeFallbackAccountId !== null) {
+      if (typeof nonClaudeCodeFallbackAccountId !== 'string') {
+        return res.status(400).json({ error: 'nonClaudeCodeFallbackAccountId must be a string' })
+      }
+    }
+
+    if (
+      nonClaudeCodeFallbackAccountType !== undefined &&
+      nonClaudeCodeFallbackAccountType !== null
+    ) {
+      const validTypes = ['claude-official', 'claude-console', 'bedrock', 'ccr']
+      if (!validTypes.includes(nonClaudeCodeFallbackAccountType)) {
+        return res.status(400).json({
+          error: `nonClaudeCodeFallbackAccountType must be one of: ${validTypes.join(', ')}`
+        })
+      }
+    }
+
     const updateData = {}
     if (claudeCodeOnlyEnabled !== undefined)
       updateData.claudeCodeOnlyEnabled = claudeCodeOnlyEnabled
@@ -87,6 +116,12 @@ router.put('/claude-relay-config', authenticateAdmin, async (req, res) => {
       updateData.sessionBindingErrorMessage = sessionBindingErrorMessage
     if (sessionBindingTtlDays !== undefined)
       updateData.sessionBindingTtlDays = sessionBindingTtlDays
+    if (nonClaudeCodeFallbackEnabled !== undefined)
+      updateData.nonClaudeCodeFallbackEnabled = nonClaudeCodeFallbackEnabled
+    if (nonClaudeCodeFallbackAccountId !== undefined)
+      updateData.nonClaudeCodeFallbackAccountId = nonClaudeCodeFallbackAccountId
+    if (nonClaudeCodeFallbackAccountType !== undefined)
+      updateData.nonClaudeCodeFallbackAccountType = nonClaudeCodeFallbackAccountType
 
     const updatedConfig = await claudeRelayConfigService.updateConfig(
       updateData,
@@ -102,6 +137,26 @@ router.put('/claude-relay-config', authenticateAdmin, async (req, res) => {
     logger.error('❌ Failed to update Claude relay config:', error)
     return res.status(500).json({
       error: 'Failed to update configuration',
+      message: error.message
+    })
+  }
+})
+
+/**
+ * POST /admin/claude-relay-config/validate-fallback
+ * 验证降级账户配置是否有效
+ */
+router.post('/claude-relay-config/validate-fallback', authenticateAdmin, async (req, res) => {
+  try {
+    const validation = await claudeRelayConfigService.validateFallbackAccount()
+    return res.json({
+      success: true,
+      validation
+    })
+  } catch (error) {
+    logger.error('❌ Failed to validate fallback account:', error)
+    return res.status(500).json({
+      error: 'Failed to validate fallback account',
       message: error.message
     })
   }
