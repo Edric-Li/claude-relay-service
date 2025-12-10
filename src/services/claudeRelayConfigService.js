@@ -19,6 +19,11 @@ const DEFAULT_CONFIG = {
   nonClaudeCodeFallbackEnabled: false, // 是否启用降级（而非直接拒绝）
   nonClaudeCodeFallbackAccountId: null, // 降级账户 ID
   nonClaudeCodeFallbackAccountType: null, // 降级账户类型 (claude-official/claude-console/bedrock/ccr)
+  // 用户消息队列配置
+  userMessageQueueEnabled: false, // 是否启用用户消息队列（默认关闭）
+  userMessageQueueDelayMs: 200, // 请求间隔（毫秒）
+  userMessageQueueTimeoutMs: 5000, // 队列等待超时（毫秒），优化后锁持有时间短无需长等待
+  userMessageQueueLockTtlMs: 5000, // 锁TTL（毫秒），请求发送后立即释放无需长TTL
   updatedAt: null,
   updatedBy: null
 }
@@ -398,11 +403,11 @@ class ClaudeRelayConfigService {
 
   /**
    * 验证新会话请求
-   * @param {Object} requestBody - 请求体
+   * @param {Object} _requestBody - 请求体（预留参数，当前未使用）
    * @param {string} originalSessionId - 原始会话ID
    * @returns {Promise<Object>} { valid: boolean, error?: string, binding?: object, isNewSession?: boolean }
    */
-  async validateNewSession(requestBody, originalSessionId) {
+  async validateNewSession(_requestBody, originalSessionId) {
     const cfg = await this.getConfig()
 
     if (!cfg.globalSessionBindingEnabled) {
