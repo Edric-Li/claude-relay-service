@@ -1,5 +1,10 @@
 # Claude Relay Service
 
+> [!CAUTION]
+> **安全更新通知**：v1.1.248 及以下版本存在严重的管理员认证绕过漏洞，攻击者可未授权访问管理面板。
+>
+> **请立即更新到 v1.1.249+ 版本**，或迁移到新一代项目 **[CRS 2.0 (sub2api)](https://github.com/Wei-Shaw/sub2api)**
+
 多平台 AI API 中转服务，支持 Claude、Gemini、OpenAI Responses (Codex)、AWS Bedrock、Azure OpenAI 等。
 
 ## 功能特性
